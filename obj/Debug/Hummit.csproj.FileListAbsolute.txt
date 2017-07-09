@@ -2,4 +2,3 @@ c:\users\mike\documents\visual studio 2015\Projects\Hummit\bin\Debug\Hummit.dll
 c:\users\mike\documents\visual studio 2015\Projects\Hummit\bin\Debug\Hummit.pdb
 c:\users\mike\documents\visual studio 2015\Projects\Hummit\obj\Debug\Hummit.dll
 c:\users\mike\documents\visual studio 2015\Projects\Hummit\obj\Debug\Hummit.pdb
-C:\Users\mike\Documents\Visual Studio 2015\Projects\Hummit\obj\Debug\Hummit.csprojResolveAssemblyReference.cache

@@ -20,10 +20,10 @@ namespace Hummit
             this.y = y;
             this.z = z;
         }
-        public static Vk3 rotateY(float deg,Vk3 v1)
+        public static Vk3 rotateY(float rad,Vk3 v1)
         {
-            var s = (float) Math.Sin(deg);
-            var c = (float) Math.Cos(deg);
+            var s = (float) Math.Sin(rad);
+            var c = (float) Math.Cos(rad);
             var x =  c * v1.x + s * v1.z;
             var z = -s * v1.x + c * v1.z;
             return (new Vk3(x, v1.y, z));
@@ -209,9 +209,12 @@ namespace Hummit
         float [] curpars;
         float [] lstpars;
 
-        float convergenceEps = 1e-7f;
+        float convergenceEps = 1e-6f;
         float stepSize = 0.01f; 
         int maxiter = 100;
+        public bool verbose = false;
+        public int fcalled;
+        public float ferr;
 
         public oapOptimizer(optTypeSelectorE mode)
         {
@@ -260,11 +263,11 @@ namespace Hummit
                     break;
             }
         }
-        public static Vk3 rotateY(float deg, Vk3 v1)
+        public static Vk3 rotateY(float rad, Vk3 v1)
         {
-            var s = (float)Math.Sin(deg);
-            var c = (float)Math.Cos(deg);
-            var x = c * v1.x + s * v1.z;
+            var s = (float)Math.Sin(rad);
+            var c = (float)Math.Cos(rad);
+            var x =  c * v1.x + s * v1.z;
             var z = -s * v1.x + c * v1.z;
             return (new Vk3(x, v1.y, z));
         }
@@ -305,8 +308,10 @@ namespace Hummit
 
             return (err);
         }
+
         float F(float [] pars)
         {
+            fcalled += 1;
             unpackIntoF(pars); // this makes F use pars
             float sum = 0;
             var oap = oaplist.First;
@@ -338,14 +343,14 @@ namespace Hummit
             for (int i = 0; i < npars; i++)
             {
                 var dlt = (curpars[i] - lstpars[i]);
-                //var c = curpars[i];
-                //var l = lstpars[i];
-                //                System.Console.WriteLine("    i:" + i + " l:" + l + " c:" + c + " dlt:" + dlt + "  err:" + err);
-                err += dlt * dlt;
+                err += dlt*dlt;
             }
-            err = (float) Math.Sqrt(err);
-            System.Console.WriteLine("iter:" + iter + " err:" + err);
-            return (err < convergenceEps);
+            ferr = (float) Math.Sqrt(err);
+            if (verbose)
+            {
+                System.Console.WriteLine("iter:" + iter + " err:" + ferr);
+            }
+            return (ferr < convergenceEps);
         }
         public float [] calcGradPoint(float [] pars, float a, float [] grad)
         {
@@ -356,15 +361,60 @@ namespace Hummit
             }
             return (newpars);
         }
-        public float findBestA(float [] pars,float [] grad)
+        public float findBestA(float[] pars, float[] grad)
         {
-            int maxn = 100000;
-            var maxa = 8.0f / npars;
+            int maxn = 32;
+            var maxa = 4.0f / npars;
+            float rv;
+            if (iter <= 6) // 6 worked well once
+            {
+                rv = findBestABruteForce(maxn, maxa, pars, grad);
+            } else {
+                rv = findBestAdivideInterval(maxa, pars, grad);
+            }
+            return (rv);
+        }
+        public float findBestAdivideInterval(float maxa,float[] pars, float[] grad)
+        {
+            var hia = maxa;
+            var hipar = calcGradPoint(pars, hia, grad);
+            var hif = F(hipar);
+            var loa = 0.0f;
+            var lopar = calcGradPoint(pars, loa, grad);
+            var lof = F(lopar);
+
+            while (Math.Abs(hia-loa)/maxa>0.0001)
+            {
+                var nea = (hia+loa)/2;
+                var nepar = calcGradPoint(pars, nea, grad);
+                var nef = F(nepar);
+                if (hif>lof)
+                {
+                    hia = nea;
+                    hipar = nepar;
+                    hif = nef;
+                }
+                else
+                {
+                    loa = nea;
+                    lopar = nepar;
+                    lof = nef;
+                }
+            }
+            var rv = loa;
+            if (hif<lof)
+            {
+                rv = hia;
+            }
+            return (rv);
+        }
+        public float findBestABruteForce(int maxn,float maxa,float [] pars,float [] grad)
+        {
             var lsta = maxa;
             var lstminpars = calcGradPoint(pars,lsta,grad);
             var lstminval = F(lstminpars);
             var lstn = maxn;
-            for (int n = 1; n < maxn; n++)
+            for (int n = 0; n < maxn; n++)
             {
                 // back up until the values start getting bigger again
                 var nxta = (((float)n)/maxn)*maxa;
@@ -378,23 +428,28 @@ namespace Hummit
                     lstn = n;
                 }
             }
-            Console.WriteLine("   besta:" + lsta + " lstn:"+lstn+" F:"+lstminval);
+            if (verbose)
+            {
+                Console.WriteLine("   besta:" + lsta + " lstn:" + lstn + " F:" + lstminval);
+            }
             return (lsta);
         }
         public void optimize()
         {
             curpars = new float[npars];
             lstpars = new float[npars];
-            // initialize lstpars so as not to converge
-           // for (int i = 0; i < npars; i++) lstpars[i] = 10 * convergenceEps;
 
+            fcalled = 0;
             iter = 0;
             while (!converged() && iter<maxiter)
             {
                 // calculate gradient at curpnt
                 var baseval = F(curpars);
                 var grad = new float[npars];
-                System.Console.WriteLine("baseval:"+baseval);
+                if (verbose)
+                {
+                    System.Console.WriteLine("baseval:" + baseval);
+                }
                 for (int i = 0; i < npars; i++)
                 {                  
                     var pparsP = peturbcurpars(i, stepSize, +1);
@@ -405,7 +460,10 @@ namespace Hummit
                     var c = curpars[i];
                     var l = lstpars[i];
                     var g = grad[i];
-                    System.Console.WriteLine("    i:" + i + " l:" + l + " c:" + c + "  valP:"+valP+ "  valM:" + valM + " g:" +g);
+                    if (verbose)
+                    {
+                        System.Console.WriteLine("    i:" + i + " l:" + l + " c:" + c + "  valP:" + valP + "  valM:" + valM + " g:" + g);
+                    }
                 }
                 var a = findBestA(curpars, grad);
                 var nxtpars = calcGradPoint(curpars, a, grad);
@@ -424,7 +482,10 @@ namespace Hummit
             }
             // optimized value is now in curpars
             unpackIntoF(curpars);
-            Console.WriteLine("Optimied status" + status + " iter:" + iter);
+            if (verbose)
+            {
+                Console.WriteLine("Optimized status" + status + " iter:" + iter + "  fcalled:" + fcalled);
+            }
         }
     }
 
